@@ -42,9 +42,12 @@ class PlanningHelper(
     def set_static_choices(self):
         """Injects loaded classes as static choices into command parameters."""
         # Discord limits to 25 choices. We take the first 25 loaded classes.
+        sorted_keys = sorted(self.colloscopes.keys())
+        logger.info(f"Setting static choices for classes: {sorted_keys[:25]}")
+        
         choices = [
             app_commands.Choice(name=k.title(), value=k) 
-            for k in sorted(self.colloscopes.keys())
+            for k in sorted_keys
         ][:25]
         
         commands_to_patch = [self.quicklook, self.export, self.next_colle]
@@ -305,6 +308,33 @@ class PlanningHelper(
             )
             
         await inter.response.send_message(embed=embed)
+
+    @next_colle.autocomplete("group")
+    @export.autocomplete("group")
+    @quicklook.autocomplete("group")
+    async def group_autocompleter(self, inter: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        # If class is selected, filter groups. 
+        # Note: In static choices mode, inter.namespace.class_ might be the value directly?
+        # If the user hasn't selected a class yet, can we hint?
+        
+        # When using static choices, the client might send the value immediately if selected?
+        # If not, we fall back to "Select class first" logic.
+        
+        selected_class = inter.namespace.class_ # Field name is class_
+        if not selected_class:
+             return [app_commands.Choice(name="Sélectionnez une classe d'abord", value="-1")]
+        
+        class_key = selected_class.lower()
+        if class_key not in self.colloscopes:
+             return []
+
+        groups = sorted(self.colloscopes[class_key].groups)
+        return [
+            app_commands.Choice(name=g, value=g)
+            for g in groups
+            if g.startswith(current)
+        ][:25] 
+
 
 
 
