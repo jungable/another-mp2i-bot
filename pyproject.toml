@@ -12,7 +12,7 @@ dependencies = [
     "fpdf2",
     "pdf2image",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 [tool.uv]
 dev-dependencies = [
