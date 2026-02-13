@@ -54,10 +54,8 @@ class PlanningHelper(
             # Note: cmd.parameters is a list of AppCommandParameter
             for param in cmd.parameters:
                 if param.name == "class_":
-                    param.choices = choices
-                    # We might want to remove autocomplete if it was set, but we removed the decorator so it should be fine.
-                    # However, app_commands.autocomplete sets a flag. 
-                    # Since we are removing the decorators below, we are good.
+                    # Accessing private attribute because choices property has no setter
+                    param._choices = choices
                     break
 
     async def download_colloscope(self):
