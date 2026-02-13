@@ -60,6 +60,7 @@ class PlanningHelper(
             for name, param in cmd._params.items():
                 if name == "class_":
                     param.choices = choices
+
                     # On essaie aussi de désactiver l'autocomplete si possible pour éviter les conflits
                     if hasattr(param, "autocomplete"):
                         param.autocomplete = None
@@ -325,21 +326,18 @@ class PlanningHelper(
     @quicklook.autocomplete("group")
     async def group_autocompleter(self, inter: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         try:
-            # Récupération sécurisée de la classe sélectionnée
-            # L'attribut namespace contient les valeurs déjà remplies par l'utilisateur
-            selected_class = getattr(inter.namespace, "class_", None)
+            selected_class = inter.namespace.classe
             
             if not selected_class:
-                # Si aucune classe n'est sélectionnée, on ne peut pas proposer de groupes
-                # On retourne une liste vide ou un placeholder (mais placeholder peut être sélectionné donc liste vide mieux)
+                # return empty placeholder to avoid mistake selections
                 return []
-            
+
             class_key = selected_class.lower()
             if class_key not in self.colloscopes:
                  return []
 
             groups = sorted(self.colloscopes[class_key].groups)
-            
+
             # Filtrage insensible à la casse
             current_lower = current.lower()
             return [
@@ -348,12 +346,8 @@ class PlanningHelper(
                 if current_lower in g.lower()
             ][:25] 
         except Exception as e:
-            # On log l'erreur pour le débogage mais on ne crash pas l'autocomplete
             logger.error(f"Erreur dans l'autocomplete de groupe : {e}")
             return [] 
-
-
-
 
 
 async def setup(bot: MP2IBot):
