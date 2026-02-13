@@ -12,7 +12,7 @@ dependencies = [
     "fpdf2",
     "pdf2image",
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 
 [tool.uv]
 dev-dependencies = [
@@ -44,7 +44,7 @@ commands =
 [tool.ruff]
 line-length = 120
 indent-width = 4
-target-version = "py312"
+target-version = "py311"
 src = ["src"]
 exclude = ["bin"]
 
