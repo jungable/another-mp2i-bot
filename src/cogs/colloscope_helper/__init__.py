@@ -33,7 +33,7 @@ class PlanningHelper(
         self.bot = bot
         self.colloscopes: dict[str, cm.Colloscope]
 
-        self.download_colloscope()
+        self.download_colloscope() #ok the colloscope 
         self.load_colloscope()
 
         decorator = partial(
@@ -223,7 +223,8 @@ class PlanningHelper(
         colles = cm.sort_colles(colloscope.colles, sort_type="temps")  # sort by time
         filtered_colles = [c for c in colles if c.group == str(group)]
         if not filtered_colles:
-            raise ValueError("Aucune colle n'a été trouvé pour ce groupe")
+            await inter.response.send_message(f"Aucune colle trouvée pour le groupe {group}", ephemeral=True)
+            return
 
         if format in ["agenda", "csv", "todoist"]:
             format = cast(Literal["agenda", "csv", "todoist"], format)
@@ -298,7 +299,7 @@ class PlanningHelper(
             app_commands.Choice(name=g, value=g)
             for g in groups
             if g.startswith(current)
-        ][:25] # Limit to 25 choices to avoid discord errors
+        ][:25] 
 
 
 async def setup(bot: MP2IBot):
