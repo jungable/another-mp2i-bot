@@ -31,19 +31,14 @@ class PlanningHelper(
 ):
     def __init__(self, bot: MP2IBot):
         self.bot = bot
-        self.colloscopes: dict[str, cm.Colloscope]
+        self.colloscopes: dict[str, cm.Colloscope] = {}
 
-        self.download_colloscope() #ok the colloscope 
+    async def cog_load(self):
+        """Asynchronously load the colloscope data when the cog is loaded."""
+        await self.download_colloscope()
         self.load_colloscope()
 
-        decorator = partial(
-            app_commands.choices, class_=[app_commands.Choice(name=k, value=k) for k in self.colloscopes]
-        )
-        decorator()(self.quicklook)
-        decorator()(self.export)
-        decorator()(self.next_colle)
-
-    def download_colloscope(self):
+    async def download_colloscope(self):
         url = os.environ.get("COLLOSCOPE_URL")
         if not url:
             logger.warning("COLLOSCOPE_URL not found in environment variables. Skipping download.")
@@ -51,13 +46,10 @@ class PlanningHelper(
 
         try:
             logger.info(f"Downloading colloscope from {url}...")
-            response = httpx.get(url, follow_redirects=True)
-            response.raise_for_status()
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, follow_redirects=True)
+                response.raise_for_status()
             
-            # Save raw data to ensure we have it (optional, but good for debug)
-            # with open("./external_data/colloscopes/raw_data.csv", "wb") as f:
-            #     f.write(response.content)
-
             content = response.content.decode("utf-8")
             transformed_lines = self.transform_mpi(content)
 
@@ -160,7 +152,7 @@ class PlanningHelper(
         if class_key not in self.colloscopes:
             available = ", ".join(self.colloscopes.keys())
             await inter.response.send_message(
-                f"❌ Classe '{class_}' introuvable. Classes disponibles : {available}",
+                f"Classe '{class_}' introuvable. Classes disponibles : {available}",
                 ephemeral=True
             )
             return
@@ -218,27 +210,38 @@ class PlanningHelper(
             )
             return
 
+        # Defer immediately because PDF generation can be slow
+        await inter.response.defer()
+
         colloscope = self.colloscopes[class_key]
 
         colles = cm.sort_colles(colloscope.colles, sort_type="temps")  # sort by time
         filtered_colles = [c for c in colles if c.group == str(group)]
         if not filtered_colles:
-            await inter.response.send_message(f"Aucune colle trouvée pour le groupe {group}", ephemeral=True)
+            await inter.followup.send(f"Aucune colle trouvée pour le groupe {group}")
             return
 
+        # CPU-bound task in executor for heavy formats like PDF
+        loop = self.bot.loop
+        file = await loop.run_in_executor(None, self._generate_export_file, filtered_colles, group, colloscope, format)
+        
+        await inter.followup.send(file=file)
+
+    def _generate_export_file(self, filtered_colles, group, colloscope, format):
         if format in ["agenda", "csv", "todoist"]:
-            format = cast(Literal["agenda", "csv", "todoist"], format)
+            format_cast = cast(Literal["agenda", "csv", "todoist"], format)
             buffer = io.StringIO()
-            cm.write_colles(buffer, format, filtered_colles, str(group), colloscope.holidays)
-            buffer = io.BytesIO(buffer.getvalue().encode())
-            format = "csv"
+            cm.write_colles(buffer, format_cast, filtered_colles, str(group), colloscope.holidays)
+            byte_buffer = io.BytesIO(buffer.getvalue().encode())
+            file_ext = "csv"
         else:
-            format = cast(Literal["pdf"], format)
-            buffer = io.BytesIO()
-            cm.write_colles(buffer, format, filtered_colles, str(group), colloscope.holidays)
-        buffer.seek(0)
-        file = discord.File(buffer, filename=f"colloscope.{format}")
-        await inter.response.send_message(file=file)
+            format_cast = cast(Literal["pdf"], format)
+            byte_buffer = io.BytesIO()
+            cm.write_colles(byte_buffer, format_cast, filtered_colles, str(group), colloscope.holidays)
+            file_ext = "pdf"
+            
+        byte_buffer.seek(0)
+        return discord.File(byte_buffer, filename=f"colloscope.{file_ext}")
 
     @app_commands.command(name="prochaine_colle", description="Affiche la prochaine colle")
     @app_commands.rename(class_="classe", group="groupe", nb="nombre")
@@ -300,6 +303,16 @@ class PlanningHelper(
             for g in groups
             if g.startswith(current)
         ][:25] 
+
+    @next_colle.autocomplete("class_")
+    @export.autocomplete("class_")
+    @quicklook.autocomplete("class_")
+    async def class_autocompleter(self, inter: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        return [
+            app_commands.Choice(name=k, value=k)
+            for k in self.colloscopes
+            if k.startswith(current.lower())
+        ][:25]
 
 
 async def setup(bot: MP2IBot):
