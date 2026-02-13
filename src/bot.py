@@ -58,10 +58,10 @@ class MP2IBot(commands.Bot):
         await self.sync_tree()
 
     async def sync_tree(self) -> None:
-        # First, copy global commands to the main guild for instant updates in dev
+        # First, clear guild-specific commands to avoid duplicates with global commands
         if self.config.guild_id:
             guild_obj = discord.Object(id=self.config.guild_id)
-            self.tree.copy_global_to(guild=guild_obj)
+            self.tree.clear_commands(guild=guild_obj)
             await self.tree.sync(guild=guild_obj)
         
         # Then sync other guilds if any
