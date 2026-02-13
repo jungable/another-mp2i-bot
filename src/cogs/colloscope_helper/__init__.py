@@ -41,25 +41,38 @@ class PlanningHelper(
 
     def set_static_choices(self):
         """Injects loaded classes as static choices into command parameters."""
-        # Discord limits to 25 choices. We take the first 25 loaded classes.
         sorted_keys = sorted(self.colloscopes.keys())
-        logger.info(f"Setting static choices for classes: {sorted_keys[:25]}")
+        logger.info(f"Generating static choices. Found {len(sorted_keys)} classes.")
         
         choices = [
             app_commands.Choice(name=k.title(), value=k) 
             for k in sorted_keys
         ][:25]
         
+        if not choices:
+            logger.warning("No classes found! Static choices will be empty.")
+        
         commands_to_patch = [self.quicklook, self.export, self.next_colle]
         
         for cmd in commands_to_patch:
-            # We need to find the 'class_' parameter and set its choices
-            # Note: cmd.parameters is a list of AppCommandParameter
+            found = False
             for param in cmd.parameters:
                 if param.name == "class_":
                     # Accessing private attribute because choices property has no setter
+                    # Also explicitly disable autocomplete to avoid client confusion
                     param._choices = choices
+                    # Check if we need to clear autocomplete callback if it was set via decorator previously?
+                    # The decorator adds it to the Command object's autocomplete cache, not just the param?
+                    # param.autocomplete is just a function reference usually? 
+                    # Let's inspect, but for now assuming replacing choices is key.
+                    # We can try to set param.autocomplete = None if it's writable? It's a method on Parameter instance? 
+                    # No, it's an attribute on Parameter class in documentation? 
+                    # In inspection, 'autocomplete' was in dir().
+                    
+                    found = True
                     break
+            if not found:
+                logger.warning(f"Could not find 'class_' parameter in command {cmd.name}")
 
     async def download_colloscope(self):
         url = os.environ.get("COLLOSCOPE_URL")
@@ -313,27 +326,28 @@ class PlanningHelper(
     @export.autocomplete("group")
     @quicklook.autocomplete("group")
     async def group_autocompleter(self, inter: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-        # If class is selected, filter groups. 
-        # Note: In static choices mode, inter.namespace.class_ might be the value directly?
-        # If the user hasn't selected a class yet, can we hint?
-        
-        # When using static choices, the client might send the value immediately if selected?
-        # If not, we fall back to "Select class first" logic.
-        
-        selected_class = inter.namespace.class_ # Field name is class_
-        if not selected_class:
-             return [app_commands.Choice(name="Sélectionnez une classe d'abord", value="-1")]
-        
-        class_key = selected_class.lower()
-        if class_key not in self.colloscopes:
-             return []
+        try:
+            selected_class = inter.namespace.class_
+            if not selected_class:
+                 return [app_commands.Choice(name="Sélectionnez une classe d'abord", value="-1")]
+            
+            # If static choices are used, selected_class should be the value (str)
+            class_key = selected_class.lower()
+            if class_key not in self.colloscopes:
+                 return []
 
-        groups = sorted(self.colloscopes[class_key].groups)
-        return [
-            app_commands.Choice(name=g, value=g)
-            for g in groups
-            if g.startswith(current)
-        ][:25] 
+            groups = sorted(self.colloscopes[class_key].groups)
+            return [
+                app_commands.Choice(name=g, value=g)
+                for g in groups
+                if g.startswith(current)
+            ][:25] 
+        except Exception as e:
+            # Log but don't crash, especially for interaction errors
+            if isinstance(e, (discord.NotFound, discord.HTTPException)):
+                return [] 
+            logger.error(f"Error in group_autocompleter: {e}")
+            return [] 
 
 
 
