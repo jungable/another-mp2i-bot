@@ -58,21 +58,18 @@ class PlanningHelper(
             found = False
             for param in cmd.parameters:
                 if param.name == "class_":
-                    # Accessing private attribute because choices property has no setter
-                    # Also explicitly disable autocomplete to avoid client confusion
+                    # Injection des choix statiques via l'attribut privé _choices
+                    # C'est nécessaire car discord.py ne permet pas de modifier choices dynamiquement via l'API publique
                     param._choices = choices
-                    # Check if we need to clear autocomplete callback if it was set via decorator previously?
-                    # The decorator adds it to the Command object's autocomplete cache, not just the param?
-                    # param.autocomplete is just a function reference usually? 
-                    # Let's inspect, but for now assuming replacing choices is key.
-                    # We can try to set param.autocomplete = None if it's writable? It's a method on Parameter instance? 
-                    # No, it's an attribute on Parameter class in documentation? 
-                    # In inspection, 'autocomplete' was in dir().
+                    # On essaie aussi de désactiver l'autocomplete si possible pour éviter les conflits
+                    # Le client Discord utilissera les choix statiques s'ils sont présents
+                    if hasattr(param, "_autocomplete"):
+                        param._autocomplete = None
                     
                     found = True
                     break
             if not found:
-                logger.warning(f"Could not find 'class_' parameter in command {cmd.name}")
+                logger.warning(f"Paramètre 'class_' introuvable dans la commande {cmd.name}")
 
     async def download_colloscope(self):
         url = os.environ.get("COLLOSCOPE_URL")
@@ -283,10 +280,13 @@ class PlanningHelper(
     @app_commands.rename(class_="classe", group="groupe", nb="nombre")
     @app_commands.describe(class_="Votre classe.", group="Votre groupe de colle.", nb="Le nombre de colle à afficher.")
     async def next_colle(self, inter: discord.Interaction, class_: str, group: str, nb: int = 5):
+        # Defer to avoid "Unknown interaction" if processing takes >3s
+        await inter.response.defer()
+
         class_key = class_.lower()
         if class_key not in self.colloscopes:
             available = ", ".join(self.colloscopes.keys())
-            await inter.response.send_message(
+            await inter.followup.send(
                 f"Classe '{class_}' introuvable. Classes disponibles : {available}",
                 ephemeral=True
             )
@@ -297,7 +297,7 @@ class PlanningHelper(
         sorted_colles = cm.get_group_upcoming_colles(colloscope.colles, str(group))
         
         if not sorted_colles:
-            await inter.response.send_message(f"Aucune colle trouvée pour le groupe {group}", ephemeral=True)
+            await inter.followup.send(f"Aucune colle trouvée pour le groupe {group}", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -320,33 +320,38 @@ class PlanningHelper(
                 inline=False
             )
             
-        await inter.response.send_message(embed=embed)
+        await inter.followup.send(embed=embed)
 
     @next_colle.autocomplete("group")
     @export.autocomplete("group")
     @quicklook.autocomplete("group")
     async def group_autocompleter(self, inter: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         try:
-            selected_class = inter.namespace.class_
-            if not selected_class:
-                 return [app_commands.Choice(name="Sélectionnez une classe d'abord", value="-1")]
+            # Récupération sécurisée de la classe sélectionnée
+            # L'attribut namespace contient les valeurs déjà remplies par l'utilisateur
+            selected_class = getattr(inter.namespace, "class_", None)
             
-            # If static choices are used, selected_class should be the value (str)
+            if not selected_class:
+                # Si aucune classe n'est sélectionnée, on ne peut pas proposer de groupes
+                # On retourne une liste vide ou un placeholder (mais placeholder peut être sélectionné donc liste vide mieux)
+                return []
+            
             class_key = selected_class.lower()
             if class_key not in self.colloscopes:
                  return []
 
             groups = sorted(self.colloscopes[class_key].groups)
+            
+            # Filtrage insensible à la casse
+            current_lower = current.lower()
             return [
                 app_commands.Choice(name=g, value=g)
                 for g in groups
-                if g.startswith(current)
+                if current_lower in g.lower()
             ][:25] 
         except Exception as e:
-            # Log but don't crash, especially for interaction errors
-            if isinstance(e, (discord.NotFound, discord.HTTPException)):
-                return [] 
-            logger.error(f"Error in group_autocompleter: {e}")
+            # On log l'erreur pour le débogage mais on ne crash pas l'autocomplete
+            logger.error(f"Erreur dans l'autocomplete de groupe : {e}")
             return [] 
 
 
