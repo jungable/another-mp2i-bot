@@ -56,15 +56,13 @@ class PlanningHelper(
         
         for cmd in commands_to_patch:
             found = False
-            for param in cmd.parameters:
-                if param.name == "class_":
-                    # Injection des choix statiques via l'attribut privé _choices
-                    # C'est nécessaire car discord.py ne permet pas de modifier choices dynamiquement via l'API publique
-                    param._choices = choices
+            # direct acces to CommandParameter
+            for name, param in cmd._params.items():
+                if name == "class_":
+                    param.choices = choices
                     # On essaie aussi de désactiver l'autocomplete si possible pour éviter les conflits
-                    # Le client Discord utilissera les choix statiques s'ils sont présents
-                    if hasattr(param, "_autocomplete"):
-                        param._autocomplete = None
+                    if hasattr(param, "autocomplete"):
+                        param.autocomplete = None
                     
                     found = True
                     break
