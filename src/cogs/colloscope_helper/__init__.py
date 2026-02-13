@@ -58,11 +58,9 @@ class PlanningHelper(
             # with open("./external_data/colloscopes/raw_data.csv", "wb") as f:
             #     f.write(response.content)
 
-            # Transform data in memory
             content = response.content.decode("utf-8")
             transformed_lines = self.transform_mpi(content)
 
-            # Save transformed data
             output_path = "./external_data/colloscopes/mpi.csv"
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
@@ -80,17 +78,14 @@ class PlanningHelper(
         reader = csv.reader(f, delimiter=",")
         lines = list(reader)
 
-        # Skip metadata lines
         if len(lines) < 4:
             return []
 
-        # Adjust header extraction based on GSheet format analysis
-        # Line 4 corresponds to dates
         header_line_index = 3 
         
         lines = lines[header_line_index:] 
         header = lines[0]
-        lines = lines[2:] # Skip header and next line to get to data
+        lines = lines[2:]
 
         new_header = [""] * 5
         valid_indices = []
@@ -119,13 +114,10 @@ class PlanningHelper(
             if not line or not any(line): continue
             if len(line) < 5: continue
             
-            # Swapping columns to match: Subject, Prof, Day, Hour, Room
-            # Original: Subject(0), Prof(1), Room(2), Day(3), Hour(4)
             day = line[3]
             hour = line[4]
             room = line[2]
             
-            # Hour formatting: "18h-19h" -> "18h"
             hour = hour.split("-")[0].replace(" ", "")
 
             new_row = [line[0], line[1], day, hour, room]
@@ -133,7 +125,6 @@ class PlanningHelper(
             # Append only the columns corresponding to valid dates/headers
             for index in valid_indices:
                 if index < len(line):
-                    # Extract only the first number found (Group ID)
                     val = line[index]
                     match = re.search(r"(\d+)", val)
                     if match:
@@ -141,7 +132,7 @@ class PlanningHelper(
                     else:
                          new_row.append("")
                 else:
-                    new_row.append("") # Padding if missing
+                    new_row.append("") 
 
             processed_lines.append(new_row)
         
@@ -178,14 +169,13 @@ class PlanningHelper(
         await inter.response.defer()
 
         colloscope = self.colloscopes[class_key]
-        colles = cm.sort_colles(colloscope.colles, sort_type="temps")  # sort by time
+        colles = cm.sort_colles(colloscope.colles, sort_type="temps")
 
         filtered_colles = [c for c in colles if c.group == str(group)]
         if not filtered_colles:
-            await inter.followup.send(f"❌ Aucune colle trouvée pour le groupe {group}")
+            await inter.followup.send(f"Aucune colle trouvée pour le groupe {group}")
             return
 
-        # Run CPU-bound task in executor to avoid blocking the bot loop
         loop = self.bot.loop
         files = await loop.run_in_executor(None, self._generate_quicklook_files, filtered_colles, group, colloscope)
 
@@ -223,7 +213,7 @@ class PlanningHelper(
         if class_key not in self.colloscopes:
             available = ", ".join(self.colloscopes.keys())
             await inter.response.send_message(
-                f"❌ Classe '{class_}' introuvable. Classes disponibles : {available}",
+                f"Classe '{class_}' introuvable. Classes disponibles : {available}",
                 ephemeral=True
             )
             return
@@ -257,7 +247,7 @@ class PlanningHelper(
         if class_key not in self.colloscopes:
             available = ", ".join(self.colloscopes.keys())
             await inter.response.send_message(
-                f"❌ Classe '{class_}' introuvable. Classes disponibles : {available}",
+                f"Classe '{class_}' introuvable. Classes disponibles : {available}",
                 ephemeral=True
             )
             return
@@ -267,11 +257,11 @@ class PlanningHelper(
         sorted_colles = cm.get_group_upcoming_colles(colloscope.colles, str(group))
         
         if not sorted_colles:
-            await inter.response.send_message(f"❌ Aucune colle trouvée pour le groupe {group}", ephemeral=True)
+            await inter.response.send_message(f"Aucune colle trouvée pour le groupe {group}", ephemeral=True)
             return
 
         embed = discord.Embed(
-            title=f"📅 Prochaines Colles - Groupe {group}",
+            title=f"Prochaines Colles - Groupe {group}",
             description=f"Voici les {min(nb, len(sorted_colles), 12)} prochaines colles :",
             color=discord.Color.from_rgb(58, 134, 255) # A nice blue
         )
@@ -286,7 +276,7 @@ class PlanningHelper(
             # Create a nice field for each colle
             embed.add_field(
                 name=f"{date_str} - {colle.str_time}",
-                value=f"📚 **{colle.subject}**\n👨‍🏫 {colle.professor}\n🚪 Salle {colle.classroom}",
+                value=f"**{colle.subject}**\n{colle.professor}\nSalle {colle.classroom}",
                 inline=False
             )
             
