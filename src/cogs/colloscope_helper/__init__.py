@@ -37,6 +37,28 @@ class PlanningHelper(
         """Asynchronously load the colloscope data when the cog is loaded."""
         await self.download_colloscope()
         self.load_colloscope()
+        self.set_static_choices()
+
+    def set_static_choices(self):
+        """Injects loaded classes as static choices into command parameters."""
+        # Discord limits to 25 choices. We take the first 25 loaded classes.
+        choices = [
+            app_commands.Choice(name=k.title(), value=k) 
+            for k in sorted(self.colloscopes.keys())
+        ][:25]
+        
+        commands_to_patch = [self.quicklook, self.export, self.next_colle]
+        
+        for cmd in commands_to_patch:
+            # We need to find the 'class_' parameter and set its choices
+            # Note: cmd.parameters is a list of AppCommandParameter
+            for param in cmd.parameters:
+                if param.name == "class_":
+                    param.choices = choices
+                    # We might want to remove autocomplete if it was set, but we removed the decorator so it should be fine.
+                    # However, app_commands.autocomplete sets a flag. 
+                    # Since we are removing the decorators below, we are good.
+                    break
 
     async def download_colloscope(self):
         url = os.environ.get("COLLOSCOPE_URL")
@@ -286,33 +308,7 @@ class PlanningHelper(
             
         await inter.response.send_message(embed=embed)
 
-    @next_colle.autocomplete("group")
-    @export.autocomplete("group")
-    @quicklook.autocomplete("group")
-    async def group_autocompleter(self, inter: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-        if inter.namespace.classe is None:
-            return [app_commands.Choice(name="Sélectionnez une classe avant un groupe", value="-1")]
 
-        class_key = inter.namespace.classe.lower()
-        if class_key not in self.colloscopes:
-             return []
-
-        groups = sorted(self.colloscopes[class_key].groups)
-        return [
-            app_commands.Choice(name=g, value=g)
-            for g in groups
-            if g.startswith(current)
-        ][:25] 
-
-    @next_colle.autocomplete("class_")
-    @export.autocomplete("class_")
-    @quicklook.autocomplete("class_")
-    async def class_autocompleter(self, inter: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-        return [
-            app_commands.Choice(name=k, value=k)
-            for k in self.colloscopes
-            if k.startswith(current.lower())
-        ][:25]
 
 
 async def setup(bot: MP2IBot):
