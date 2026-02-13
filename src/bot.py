@@ -26,10 +26,10 @@ class MP2IBot(commands.Bot):
         super().__init__(
             command_prefix=commands.when_mentioned,
             tree_cls=CustomCommandTree,
-            member_cache_flags=discord.MemberCacheFlags.none(),
-            chunk_guilds_at_startup=False,
+            member_cache_flags=discord.MemberCacheFlags.all(),
+            chunk_guilds_at_startup=True,
             allowed_mentions=discord.AllowedMentions.none(),
-            intents=discord.Intents.default(),
+            intents=discord.Intents.all(),
             help_command=None,
         )
 
@@ -58,18 +58,8 @@ class MP2IBot(commands.Bot):
         await self.sync_tree()
 
     async def sync_tree(self) -> None:
-        # First, clear guild-specific commands to avoid duplicates with global commands
-        if self.config.guild_id:
-            guild_obj = discord.Object(id=self.config.guild_id)
-            self.tree.clear_commands(guild=guild_obj)
-            await self.tree.sync(guild=guild_obj)
-        
-        # Then sync other guilds if any
         for guild_id in self.tree.active_guild_ids:
-            if guild_id != self.config.guild_id:
-                await self.tree.sync(guild=discord.Object(guild_id))
-        
-        # Finally sync global (might take time)
+            await self.tree.sync(guild=discord.Object(guild_id))
         self.app_commands: list[AppCommand] = await self.tree.sync()
 
     async def on_ready(self) -> None:
