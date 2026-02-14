@@ -182,9 +182,11 @@ class ChatBot(Cog):
             and message.author.id != message.guild.me.id
             and (
                 message.guild.me in message.mentions
-                or message.reference is not None
-                and isinstance(message.reference.resolved, discord.Message)
-                and message.reference.resolved.author.id == message.guild.me.id
+                or (
+                    message.reference is not None
+                    and isinstance(message.reference.resolved, discord.Message)
+                    and message.reference.resolved.author.id == message.guild.me.id
+                )
             )
         ):
             await self.ask_to_openai(message)

@@ -5,7 +5,6 @@ import io
 import logging
 import os
 import re
-from functools import partial
 from glob import glob
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -42,34 +41,30 @@ class PlanningHelper(
     def set_static_choices(self):
         """Injects loaded classes as static choices into command parameters."""
         sorted_keys = sorted(self.colloscopes.keys())
-        logger.info(f"Generating static choices. Found {len(sorted_keys)} classes.")
-        
-        choices = [
-            app_commands.Choice(name=k.title(), value=k) 
-            for k in sorted_keys
-        ][:25]
-        
+        logger.info(__("Generating static choices. Found {} classes.", len(sorted_keys)))
+
+        choices = [app_commands.Choice(name=k.title(), value=k) for k in sorted_keys][:25]
+
         if not choices:
             logger.warning("No classes found! Static choices will be empty.")
-        
+
         commands_to_patch = [self.quicklook, self.export, self.next_colle]
-        
+
         for cmd in commands_to_patch:
             found = False
-            for param in cmd.parameters:
-                if param.name == "class_":
-                    # Injection des choix statiques via l'attribut privé _choices
-                    # C'est nécessaire car discord.py ne permet pas de modifier choices dynamiquement via l'API publique
-                    param._choices = choices
+            # direct acces to CommandParameter
+            for name, param in cmd._params.items():
+                if name == "class_":
+                    param.choices = choices
+
                     # On essaie aussi de désactiver l'autocomplete si possible pour éviter les conflits
-                    # Le client Discord utilissera les choix statiques s'ils sont présents
-                    if hasattr(param, "_autocomplete"):
-                        param._autocomplete = None
-                    
+                    if hasattr(param, "autocomplete"):
+                        param.autocomplete = None
+
                     found = True
                     break
             if not found:
-                logger.warning(f"Paramètre 'class_' introuvable dans la commande {cmd.name}")
+                logger.warning(__("Paramètre 'class_' introuvable dans la commande {cmd.name}", cmd=cmd))
 
     async def download_colloscope(self):
         url = os.environ.get("COLLOSCOPE_URL")
@@ -78,25 +73,25 @@ class PlanningHelper(
             return
 
         try:
-            logger.info(f"Downloading colloscope from {url}...")
+            logger.info(__("Downloading colloscope from {url}...", url=url))
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, follow_redirects=True)
                 response.raise_for_status()
-            
+
             content = response.content.decode("utf-8")
             transformed_lines = self.transform_mpi(content)
 
             output_path = "./external_data/colloscopes/mpi.csv"
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            
-            with open(output_path, "w", newline="", encoding="utf-8") as f:
+
+            with open(output_path, "w", newline="", encoding="utf-8") as f:  # noqa: ASYNC230 (ignoring sync open in async function since it's a 'one-shot'
                 writer = csv.writer(f, delimiter=",")
                 writer.writerows(transformed_lines)
-                
-            logger.info(f"Colloscope downloaded and transformed successfully to {output_path}")
 
-        except Exception as e:
-            logger.error(f"Failed to download/transform colloscope: {e}")
+            logger.info(__("Colloscope downloaded and transformed successfully to {}", output_path))
+
+        except Exception:
+            logger.exception("Failed to download/transform colloscope")
 
     def transform_mpi(self, content: str) -> list[list[str]]:
         f = io.StringIO(content)
@@ -106,9 +101,9 @@ class PlanningHelper(
         if len(lines) < 4:
             return []
 
-        header_line_index = 3 
-        
-        lines = lines[header_line_index:] 
+        header_line_index = 3
+
+        lines = lines[header_line_index:]
         header = lines[0]
         lines = lines[2:]
 
@@ -117,36 +112,40 @@ class PlanningHelper(
         for i, column in enumerate(header):
             if i < 5:
                 continue
-            if not column: continue
-            
+            if not column:
+                continue
+
             date_parts = column.split("-")
             if len(date_parts) == 3:
-                 # DD-MM-YYYY -> DD/MM/YY
-                 year = date_parts[2]
-                 if len(year) == 4: year = year[2:]
-                 new_header.append(f"{date_parts[0]}/{date_parts[1]}/{year}")
-                 valid_indices.append(i)
+                # DD-MM-YYYY -> DD/MM/YY
+                year = date_parts[2]
+                if len(year) == 4:
+                    year = year[2:]
+                new_header.append(f"{date_parts[0]}/{date_parts[1]}/{year}")
+                valid_indices.append(i)
             else:
-                 new_header.append(column)
-                 valid_indices.append(i)
+                new_header.append(column)
+                valid_indices.append(i)
 
         processed_lines = []
         # The header included for stats
-        final_header = ["Matiere", "Prof", "Jour", "Heure", "Salle"] + new_header[5:]
+        final_header = ["Matiere", "Prof", "Jour", "Heure", "Salle", *new_header[5:]]
         processed_lines.append(final_header)
 
         for line in lines:
-            if not line or not any(line): continue
-            if len(line) < 5: continue
-            
+            if not line or not any(line):
+                continue
+            if len(line) < 5:
+                continue
+
             day = line[3]
             hour = line[4]
             room = line[2]
-            
+
             hour = hour.split("-")[0].replace(" ", "")
 
             new_row = [line[0], line[1], day, hour, room]
-            
+
             # Append only the columns corresponding to valid dates/headers
             for index in valid_indices:
                 if index < len(line):
@@ -155,12 +154,12 @@ class PlanningHelper(
                     if match:
                         new_row.append(match.group(1))
                     else:
-                         new_row.append("")
+                        new_row.append("")
                 else:
-                    new_row.append("") 
+                    new_row.append("")
 
             processed_lines.append(new_row)
-        
+
         return processed_lines
 
     def load_colloscope(self):
@@ -171,7 +170,7 @@ class PlanningHelper(
                 continue
             try:
                 self.colloscopes[class_.lower()] = cm.Colloscope.from_filename(csv_file)
-                logger.info(f"Loaded colloscope for class {class_}")
+                logger.info(__("Loaded colloscope for class {}", class_))
             except Exception as e:
                 logger.warning(
                     __("Error while reading the colloscope from : {filename}", filename=csv_file), exc_info=e
@@ -184,9 +183,9 @@ class PlanningHelper(
         class_key = class_.lower()
         if class_key not in self.colloscopes:
             available = ", ".join(self.colloscopes.keys())
+            # Les choix invalides ne **peuvent** pas être envoyé, donc cas impossible, mais on garde pour la forme
             await inter.response.send_message(
-                f"Classe '{class_}' introuvable. Classes disponibles : {available}",
-                ephemeral=True
+                f"Classe '{class_}' introuvable. Classes disponibles : {available}", ephemeral=True
             )
             return
 
@@ -210,7 +209,7 @@ class PlanningHelper(
         buffer = io.BytesIO()
         cm.write_colles(buffer, "pdf", filtered_colles, str(group), colloscope.holidays)
         buffer.seek(0)
-        
+
         # Convert PDF to images
         images = convert_from_bytes(buffer.read())
 
@@ -238,8 +237,7 @@ class PlanningHelper(
         if class_key not in self.colloscopes:
             available = ", ".join(self.colloscopes.keys())
             await inter.response.send_message(
-                f"Classe '{class_}' introuvable. Classes disponibles : {available}",
-                ephemeral=True
+                f"Classe '{class_}' introuvable. Classes disponibles : {available}", ephemeral=True
             )
             return
 
@@ -257,7 +255,7 @@ class PlanningHelper(
         # CPU-bound task in executor for heavy formats like PDF
         loop = self.bot.loop
         file = await loop.run_in_executor(None, self._generate_export_file, filtered_colles, group, colloscope, format)
-        
+
         await inter.followup.send(file=file)
 
     def _generate_export_file(self, filtered_colles, group, colloscope, format):
@@ -272,7 +270,7 @@ class PlanningHelper(
             byte_buffer = io.BytesIO()
             cm.write_colles(byte_buffer, format_cast, filtered_colles, str(group), colloscope.holidays)
             file_ext = "pdf"
-            
+
         byte_buffer.seek(0)
         return discord.File(byte_buffer, filename=f"colloscope.{file_ext}")
 
@@ -280,22 +278,21 @@ class PlanningHelper(
     @app_commands.rename(class_="classe", group="groupe", nb="nombre")
     @app_commands.describe(class_="Votre classe.", group="Votre groupe de colle.", nb="Le nombre de colle à afficher.")
     async def next_colle(self, inter: discord.Interaction, class_: str, group: str, nb: int = 5):
-        # Defer to avoid "Unknown interaction" if processing takes >3s
+        # Defer to avoid "Unknown interaction" if processing takes >3s (should ne be possible for this command)
         await inter.response.defer()
 
         class_key = class_.lower()
         if class_key not in self.colloscopes:
             available = ", ".join(self.colloscopes.keys())
             await inter.followup.send(
-                f"Classe '{class_}' introuvable. Classes disponibles : {available}",
-                ephemeral=True
+                f"Classe '{class_}' introuvable. Classes disponibles : {available}", ephemeral=True
             )
             return
 
         colloscope = self.colloscopes[class_key]
 
         sorted_colles = cm.get_group_upcoming_colles(colloscope.colles, str(group))
-        
+
         if not sorted_colles:
             await inter.followup.send(f"Aucune colle trouvée pour le groupe {group}", ephemeral=True)
             return
@@ -303,23 +300,23 @@ class PlanningHelper(
         embed = discord.Embed(
             title=f"Prochaines Colles - Groupe {group}",
             description=f"Voici les {min(nb, len(sorted_colles), 12)} prochaines colles :",
-            color=discord.Color.from_rgb(58, 134, 255) # A nice blue
+            color=discord.Color.from_rgb(58, 134, 255),  # A nice blue
         )
-        
+
         # Add footer with requestor info
         embed.set_footer(text=f"Demandé par {inter.user.display_name}")
 
         for i in range(min(nb, len(sorted_colles), 12)):
             colle = sorted_colles[i]
             date_str = colle.long_str_date.title()
-            
+
             # Create a nice field for each colle
             embed.add_field(
                 name=f"{date_str} - {colle.str_time}",
                 value=f"**{colle.subject}**\n{colle.professor}\nSalle {colle.classroom}",
-                inline=False
+                inline=False,
             )
-            
+
         await inter.followup.send(embed=embed)
 
     @next_colle.autocomplete("group")
@@ -327,35 +324,24 @@ class PlanningHelper(
     @quicklook.autocomplete("group")
     async def group_autocompleter(self, inter: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         try:
-            # Récupération sécurisée de la classe sélectionnée
-            # L'attribut namespace contient les valeurs déjà remplies par l'utilisateur
-            selected_class = getattr(inter.namespace, "class_", None)
-            
+            selected_class = inter.namespace.classe
+
             if not selected_class:
-                # Si aucune classe n'est sélectionnée, on ne peut pas proposer de groupes
-                # On retourne une liste vide ou un placeholder (mais placeholder peut être sélectionné donc liste vide mieux)
+                # return empty placeholder to avoid mistake selections
                 return []
-            
+
             class_key = selected_class.lower()
             if class_key not in self.colloscopes:
-                 return []
+                return []
 
             groups = sorted(self.colloscopes[class_key].groups)
-            
+
             # Filtrage insensible à la casse
             current_lower = current.lower()
-            return [
-                app_commands.Choice(name=g, value=g)
-                for g in groups
-                if current_lower in g.lower()
-            ][:25] 
-        except Exception as e:
-            # On log l'erreur pour le débogage mais on ne crash pas l'autocomplete
-            logger.error(f"Erreur dans l'autocomplete de groupe : {e}")
-            return [] 
-
-
-
+            return [app_commands.Choice(name=g, value=g) for g in groups if current_lower in g.lower()][:25]
+        except Exception:
+            logger.exception("Erreur dans l'autocomplete de groupe")
+            return []
 
 
 async def setup(bot: MP2IBot):

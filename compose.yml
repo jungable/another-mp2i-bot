@@ -12,8 +12,11 @@ services:
       dockerfile: $PWD/Dockerfile
     ports:
       - 5678:5678
-    env_file:
-      - .env
+    environment:
+      CTS_TOKEN: ${CTS_TOKEN}
+      BOT_TOKEN: ${BOT_TOKEN}
+      OPENWEATHERMAP_API_KEY: ${OPENWEATHERMAP_API_KEY}
+      OPENIA_API_KEY: ${OPENIA_API_KEY}
     volumes:
       - $PWD/data:/app/data
       - $PWD/config.toml:/app/config.toml

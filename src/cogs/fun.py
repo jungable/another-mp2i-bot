@@ -45,7 +45,7 @@ class Fun(Cog):
 
         # words that trigger the bot to react with a random emoji from the list assigned to the user.
         self.users_triggers: dict[int, list[str]] = {
-            726867561924263946: ["bouteille", "boire," "bière", "alcool", "alcoolique", "alcoolisme", "alcoolique"],
+            726867561924263946: ["bouteille", "boire,bière", "alcool", "alcoolique", "alcoolisme", "alcoolique"],
             1015216092920168478: ["couleur", "couleurs"],
             433713351592247299: ["tong", "tongs", "gitan"],
             199545535017779200: ["escabeau", "petit"],

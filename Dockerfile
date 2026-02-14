@@ -14,6 +14,7 @@ RUN --mount=type=cache,target=/var/cache/apk \
 
 FROM python:3.12.0-alpine AS base
 # https://docs.docker.com/reference/dockerfile/#copy---parents
+RUN apk add poppler-utils --no-cache
 COPY --parents --from=build /app/.venv /
 WORKDIR /app
 COPY ./resources ./resources

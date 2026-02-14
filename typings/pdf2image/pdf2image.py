@@ -27,5 +27,4 @@ def convert_from_bytes(
     use_pdftocairo: bool = False,
     timeout: int | None = None,
     hide_annotations: bool = False,
-) -> list[Image.Image]:
-    ...
+) -> list[Image.Image]: ...
