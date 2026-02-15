@@ -260,15 +260,15 @@ class PlanningHelper(
 
     def _generate_export_file(self, filtered_colles, group, colloscope, format):
         if format in ["agenda", "csv", "todoist"]:
-            format_cast = cast(Literal["agenda", "csv", "todoist"], format)
+            format = cast(Literal["agenda", "csv", "todoist"], format)
             buffer = io.StringIO()
-            cm.write_colles(buffer, format_cast, filtered_colles, str(group), colloscope.holidays)
+            cm.write_colles(buffer, format, filtered_colles, str(group), colloscope.holidays)
             byte_buffer = io.BytesIO(buffer.getvalue().encode())
             file_ext = "csv"
         else:
-            format_cast = cast(Literal["pdf"], format)
+            format = cast(Literal["pdf"], format)
             byte_buffer = io.BytesIO()
-            cm.write_colles(byte_buffer, format_cast, filtered_colles, str(group), colloscope.holidays)
+            cm.write_colles(byte_buffer, format, filtered_colles, str(group), colloscope.holidays)
             file_ext = "pdf"
 
         byte_buffer.seek(0)
